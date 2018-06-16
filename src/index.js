@@ -30,8 +30,10 @@ var destinationX;
 var spacebarDown = false;
 var knife;
 var knifeRate = 1000;
+var knifeSpeed = 400;
 var nextQ = 0;
 var QButton;
+var scaleDown = 0.25;
 
 // ---------------------------------------- PRELOAD ----------------------------------------
 
@@ -51,8 +53,8 @@ function create() {
   jumpAnimation.call(this);
 
   player = this.physics.add.sprite(200, 200, 'idle01').play('idle');
-  player.scaleX = 0.25;
-  player.scaleY = 0.25;
+  player.scaleX = scaleDown;
+  player.scaleY = scaleDown;
   player.setCollideWorldBounds(true);
 
   // ============ Player Keys ============
@@ -62,7 +64,6 @@ function create() {
   // ============ Player Knife ============
   knife = this.physics.add.group();
   knife.enableBody = true;
-  knife.setAllowGravity = false;
   knife.physicsBodyType = Phaser.Physics.Arcade;
   knife.classType = Phaser.Physics.Arcade.Sprite;
   knife.createMultiple(30, 'singleKnife');
@@ -103,10 +104,12 @@ function setAnimation() {
   if (spacebarDown) {
     player.anims.play('jump');
   } else if (player.x > destinationX) {
-    player.scaleX = -0.25;
+    player.scaleX = -scaleDown;
+    knifeSpeed = knifeSpeed < 0 ? knifeSpeed : -knifeSpeed;
     player.anims.play('run', true);
   } else if (player.x < destinationX) {
-    player.scaleX = 0.25;
+    player.scaleX = scaleDown;
+    knifeSpeed = knifeSpeed > 0 ? knifeSpeed : -knifeSpeed;
     player.anims.play('run', true);
   } else {
     player.anims.play('idle', true);
@@ -122,10 +125,17 @@ function throwQ() {
       'singleKnife'
     );
     if (q) {
+      console.log('QTHROW', q);
+      console.log(
+        'x:',
+        this.input.activePointer.x,
+        '\ny:',
+        this.input.activePointer.y
+      );
       q.body.allowGravity = false;
-      q.scaleX = 0.25;
-      q.scaleY = 0.25;
-      q.setVelocityX(300);
+      q.scaleX = knifeSpeed > 0 ? scaleDown : -scaleDown;
+      q.scaleY = knifeSpeed > 0 ? scaleDown : -scaleDown;
+      q.setVelocityX(knifeSpeed);
       nextQ = this.time.now + knifeRate;
     }
   }
