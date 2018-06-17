@@ -23,17 +23,19 @@ const config = {
 };
 
 var game = new Phaser.Game(config);
-var player;
-var spacebar;
-var cursor;
-var destinationX;
-var spacebarDown = false;
+// var player;
+// var spacebar;
+// var cursor;
+// var destinationX;
+// var spacebarDown = false;
 var knife;
 var knifeRate = 500;
 var knifeSpeed = 400;
 var nextQ = 0;
-var QButton;
+// var QButton;
 var scaleDown = 0.25;
+const PLAYER_SPEED = 160;
+const PLAYER_JUMP_SPEED = -330;
 
 // ---------------------------------------- PRELOAD ----------------------------------------
 
@@ -76,7 +78,7 @@ function create() {
     addOtherPlayers(self, playerInfo);
   });
 
-  // ============ Disconnect Player ============
+  // ============ Disconnect Player Listener ============
   this.socket.on('disconnect', function(playerId) {
     self.otherPlayers.getChildren().forEach(function(otherPlayer) {
       if (playerId === otherPlayer.playerId) {
@@ -90,7 +92,8 @@ function create() {
   this.socket.on('playerMoved', function(playerInfo) {
     self.otherPlayers.getChildren().forEach(function(otherPlayer) {
       if (playerInfo.playerId === otherPlayer.playerId) {
-        otherPlayer.setPosition(playerInfo.x, playerInfo.y);
+        // otherPlayer.setPosition(playerInfo.x, playerInfo.y);
+        otherPlayer.setVelocity(playerInfo.xVel, playerInfo.yVel);
       }
     });
   });
@@ -98,6 +101,7 @@ function create() {
   // ============ Player Keys ============
 
   this.cursor = this.input.mousePointer;
+  this.cursors = this.input.keyboard.createCursorKeys();
   this.spacebar = this.input.keyboard.addKey(
     Phaser.Input.Keyboard.KeyCodes.SPACE
   );
@@ -106,8 +110,8 @@ function create() {
   this.spacebarDown = false;
   this.destinationX = null;
 
-  spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-  QButton = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
+  // spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+  // QButton = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
 
   // ============ Player Knife ============
   knife = this.physics.add.group();
@@ -128,6 +132,16 @@ function addPlayer(self, playerInfo) {
   self.player.scaleX = scaleDown;
   self.player.scaleY = scaleDown;
   self.player.setCollideWorldBounds(true);
+  // ============ Player Knife ============
+  self.player.knives = self.physics.add.group();
+  // self.player.knives.enableBody = true;
+  // self.player.knives.physicsBodyType = Phaser.Physics.Arcade;
+  // self.player.knives.classType = Phaser.Physics.Arcade.Sprite;
+  // self.player.knives.createMultiple(30, 'singleKnife');
+
+  // self.player.knives.checkWorldBounds = true;
+  self.player.knives.defaults.setCollideWorldBounds = true;
+  // self.player.knives.outOfBoundsKill = true;
 }
 
 function addOtherPlayers(self, playerInfo) {
@@ -139,7 +153,6 @@ function addOtherPlayers(self, playerInfo) {
   otherPlayer.scaleY = scaleDown;
   otherPlayer.setCollideWorldBounds(true);
   otherPlayer.playerId = playerInfo.playerId;
-  console.log('OTHER PLAYERS', self.otherPlayers);
   self.otherPlayers.add(otherPlayer);
 }
 
@@ -147,26 +160,14 @@ function addOtherPlayers(self, playerInfo) {
 
 function update() {
   if (this.player) {
-    if (this.cursor.isDown) {
-      this.destinationX = move(this.player, this.cursor);
+    if (this.cursors.left.isDown) {
+      this.player.setVelocityX(-PLAYER_SPEED);
+    } else if (this.cursors.right.isDown) {
+      this.player.setVelocityX(PLAYER_SPEED);
+    } else {
+      this.player.setVelocityX(0);
     }
-    setAnimation.call(this);
-    if (
-      Math.floor(this.player.x) > this.destinationX - 2 &&
-      Math.floor(this.player.x) < this.destinationX + 2
-    ) {
-      stop(this.player);
-      this.player.anims.play('idle');
-    }
-    if (
-      !this.spacebarDown &&
-      this.spacebar.isDown /*&& player.body.touching.down*/
-    ) {
-      this.pacebarDown = true;
-      jump(this.player, this.spacebar);
-    } else if (this.spacebar.isUp) {
-      this.spacebarDown = false;
-    }
+    if (this.cursors.up.isDown) this.player.setVelocityY(PLAYER_JUMP_SPEED);
     if (this.QButton.isDown) {
       throwQ.call(this);
     }
@@ -174,13 +175,20 @@ function update() {
     // emit player movement
     const x = this.player.x;
     const y = this.player.y;
+    const xVel = this.player.body.velocity.x;
+    const yVel = this.player.body.velocity.y;
     if (
       this.player.oldPosition &&
-      (x !== this.player.oldPosition.x || y !== this.player.oldPosition.y)
+      (x !== this.player.oldPosition.x ||
+        y !== this.player.oldPosition.y ||
+        xVel !== this.player.oldPosition.xVel ||
+        yVel !== this.player.oldPosition.yVel)
     ) {
       this.socket.emit('playerMovement', {
-        x: this.player.x,
-        y: this.player.y,
+        x: x,
+        y: y,
+        xVel: xVel,
+        yVel: yVel,
       });
     }
 
@@ -188,19 +196,26 @@ function update() {
     this.player.oldPosition = {
       x: this.player.x,
       y: this.player.y,
-      rotation: this.player.rotation,
+      xVel: this.player.body.velocity.x,
+      yVel: this.player.body.velocity.y,
     };
+    const kunai = this.player.knives.getChildren();
+    if (kunai[0] && kunai[0].body.onWall()) {
+      resetQ(kunai[0]);
+    }
+    setAnimation.call(this);
+    setOtherPlayerAnimation.call(this);
   }
 }
 
 function setAnimation() {
-  if (this.spacebarDown) {
-    this.player.anims.play('jump');
-  } else if (this.player.x > this.destinationX) {
+  if (this.cursors.up.isDown) {
+    this.player.anims.play('jump', true);
+  } else if (this.cursors.left.isDown) {
     this.player.scaleX = -scaleDown;
     knifeSpeed = knifeSpeed < 0 ? knifeSpeed : -knifeSpeed;
     this.player.anims.play('run', true);
-  } else if (this.player.x < this.destinationX) {
+  } else if (this.cursors.right.isDown) {
     this.player.scaleX = scaleDown;
     knifeSpeed = knifeSpeed > 0 ? knifeSpeed : -knifeSpeed;
     this.player.anims.play('run', true);
@@ -209,24 +224,53 @@ function setAnimation() {
   }
 }
 
+function setOtherPlayerAnimation() {
+  const otherPlayer = this.otherPlayers.getChildren()[0];
+  if (otherPlayer) {
+    if (otherPlayer.body.velocity.y) {
+      otherPlayer.anims.play('jump', true);
+    } else if (otherPlayer.body.velocity.x) {
+      otherPlayer.anims.play('run', true);
+      if (otherPlayer.body.velocity.x < 0) otherPlayer.scaleX = -scaleDown;
+      else otherPlayer.scaleX = scaleDown;
+    } else {
+      otherPlayer.anims.play('idle', true);
+    }
+  }
+}
+
 function throwQ() {
   if (this.time.now > nextQ) {
-    const q = knife.getFirstDead(
+    const playerQ = this.player.knives.getFirstDead(
       true,
       this.player.x + 24,
       this.player.y + 8,
       'singleKnife'
     );
-    if (q) {
-      q.body.allowGravity = false;
-      q.scaleX = knifeSpeed > 0 ? scaleDown : -scaleDown;
-      q.scaleY = knifeSpeed > 0 ? scaleDown : -scaleDown;
-      q.setVelocityX(knifeSpeed);
-      nextQ = this.time.now + knifeRate;
-    }
+    // console.log('PLAYERQ', playerQ);
+    playerQ.scaleX = knifeSpeed > 0 ? scaleDown : -scaleDown;
+    playerQ.scaleY = scaleDown;
+    playerQ.body.allowGravity = false;
+    playerQ.setVelocityX(knifeSpeed);
+    // console.log('CHILDRN', this.player.knives.children);
+    // console.log('QTHROW', knife);
+    // const q = knife.getFirstDead(
+    //   true,
+    //   this.player.x + 24,
+    //   this.player.y + 8,
+    //   'singleKnife'
+    // );
+    // console.log('QTHROW', q);
+    // if (q) {
+    //   q.body.allowGravity = false;
+    //   q.scaleX = knifeSpeed > 0 ? scaleDown : -scaleDown;
+    //   q.scaleY = knifeSpeed > 0 ? scaleDown : -scaleDown;
+    //   q.setVelocityX(knifeSpeed);
+    nextQ = this.time.now + knifeRate;
+    // }
   }
 }
 
 function resetQ(q) {
-  q.kill();
+  q.destroy();
 }

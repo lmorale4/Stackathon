@@ -53,7 +53,7 @@ const jumpAnimation = function() {
       { key: 'jump09' },
       { key: 'jump10' },
     ],
-    frameRate: 25,
+    frameRate: 15,
     repeat: -1,
   });
 };
