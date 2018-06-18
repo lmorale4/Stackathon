@@ -4,7 +4,7 @@ const socketio = require('socket.io');
 
 const players = {};
 
-const PORT = 8081;
+const PORT = 8082;
 
 app.use(express.static(__dirname + '/public'));
 
@@ -23,11 +23,6 @@ io.on('connection', function(socket) {
     x: 200,
     y: 200,
   };
-  const keys = Object.keys(players);
-  if (keys.length && keys.length % 2 !== 0) {
-    spawn.x *= 2;
-    spawn.y *= 2;
-  }
   // create a new player and add it to our players object
   players[socket.id] = {
     x: spawn.x,
