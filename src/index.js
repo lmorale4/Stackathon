@@ -47,6 +47,7 @@ const config = {
     preload: preload,
     create: create,
     update: update,
+    render: render,
   },
 };
 
@@ -55,6 +56,9 @@ var knifeRate = 500;
 var knifeSpeed = 400;
 var nextQ = 0;
 var p1PrevDirection;
+var p2PrevDirection;
+var p1HealthText;
+var p2HealthText;
 const scaleDown = 0.25;
 const PLAYER_SPEED = 160;
 const PLAYER_JUMP_SPEED = -330;
@@ -117,18 +121,6 @@ function create() {
 
   this.socket.on('newPlayer', function(playerInfo) {
     addOtherPlayers(self, playerInfo);
-    self.physics.add.collider(
-      self.player,
-      self.otherPlayers.getChildren()[0],
-      collidePlayers
-    );
-    self.physics.add.collider(
-      self.otherPlayers.getChildren()[0],
-      self.player,
-      collidePlayers
-    );
-    // self.physics.add.collider(self.player.knives, self.otherPlayers, knifeHit);
-    // self.physics.add.collider(self.otherPlayers.knives, self.player, knifeHit);
   });
 
   // ============ Disconnect Player Listener ============
@@ -147,6 +139,16 @@ function create() {
       if (playerInfo.playerId === otherPlayer.playerId) {
         otherPlayer.setPosition(playerInfo.x, playerInfo.y);
         otherPlayer.setVelocity(playerInfo.xVel, playerInfo.yVel);
+        otherPlayer.health = playerInfo.health;
+        console.log('OtherPlayer Health', otherPlayer.health);
+        if (otherPlayer.mode === 'player1')
+          p1HealthText.setText(
+            `${otherPlayer.mode.toUpperCase()}: ${otherPlayer.health}%`
+          );
+        else
+          p2HealthText.setText(
+            `${otherPlayer.mode.toUpperCase()}: ${otherPlayer.health}%`
+          );
       }
     });
   });
@@ -176,8 +178,22 @@ function addPlayer(self, playerInfo) {
 
   self.player.knives = self.physics.add.group();
   self.player.knives.defaults.setCollideWorldBounds = true;
-  console.log('GAME', game);
-  console.log('Phaser', Phaser);
+  self.player.health = playerInfo.health;
+  self.player.mode = playerInfo.mode;
+
+  // ============ SCORE ============
+  p1HealthText = self.add.text(16, 16, 'PLAYER 1: 100%', {
+    fontSize: '32px',
+    fill: playerInfo.x === 600 ? '#38a2f7' : '#ef6463',
+  });
+
+  const otherPlayer = self.otherPlayers.getChildren()[0];
+  if (otherPlayer) {
+    self.physics.add.collider(otherPlayer.knives, self.player, knifeHit);
+    self.physics.add.collider(self.player.knives, otherPlayer, knifeHit);
+    self.physics.add.collider(otherPlayer, self.player, collidePlayers);
+    self.physics.add.collider(self.player, otherPlayer, collidePlayers);
+  }
 }
 
 function addOtherPlayers(self, playerInfo) {
@@ -189,6 +205,22 @@ function addOtherPlayers(self, playerInfo) {
   otherPlayer.scaleY = scaleDown;
   otherPlayer.setCollideWorldBounds(true);
   otherPlayer.playerId = playerInfo.playerId;
+  otherPlayer.knives = self.physics.add.group();
+  otherPlayer.knives.defaults.setCollideWorldBounds = true;
+  otherPlayer.health = playerInfo.health;
+  otherPlayer.mode = playerInfo.mode;
+
+  // ============ SCORE ============
+  p2HealthText = self.add.text(616, 16, 'PLAYER 2: 100%', {
+    fontSize: '32px',
+    fill: playerInfo.x === 600 ? '#38a2f7' : '#ef6463',
+  });
+  if (self.player) {
+    self.physics.add.collider(otherPlayer.knives, self.player, knifeHit);
+    self.physics.add.collider(self.player.knives, otherPlayer, knifeHit);
+    self.physics.add.collider(otherPlayer, self.player, collidePlayers);
+    self.physics.add.collider(self.player, otherPlayer, collidePlayers);
+  }
   self.otherPlayers.add(otherPlayer);
 }
 
@@ -202,60 +234,50 @@ function collidePlayers(player, otherPlayer) {
   otherPlayer.body.checkCollision.right = true;
   otherPlayer.body.checkCollision.top = true;
   otherPlayer.body.checkCollision.bottom = true;
-  player.body.bounce.x = 0.2;
-  otherPlayer.body.bounce.x = 0.2;
+  // player.body.bounce.x = 0.2;
+  // otherPlayer.body.bounce.x = 0.2;
   otherPlayer.setVelocityX(0);
   player.setVelocityX(0);
 }
 
-function knifeHit(knife, otherPlayer) {
+function knifeHit(aPlayer, knife) {
   knife.destroy();
-  otherPlayer.setVelocityX(0);
+  aPlayer.setVelocityX(0);
+  aPlayer.health -= 10;
+  if (aPlayer.mode === 'player1') {
+    p1HealthText.setText(`${aPlayer.mode.toUpperCase()}: ${aPlayer.health}%`);
+  } else {
+    p2HealthText.setText(`${aPlayer.mode.toUpperCase()}: ${aPlayer.health}%`);
+  }
 }
 
 // ---------------------------------------- UPDATE ----------------------------------------
 
 function update() {
   if (this.player) {
-    if (this.cursors.left.isDown) {
-      this.player.setVelocityX(-PLAYER_SPEED);
-    } else if (this.cursors.right.isDown) {
-      this.player.setVelocityX(PLAYER_SPEED);
-    } else {
-      this.player.setVelocityX(0);
-    }
-    if (
-      /*!this.jumping &&*/
-      this.cursors.up.isDown /*&&
-      this.player.body.touching.down*/
-    ) {
-      this.jumping = true;
-      this.player.setVelocityY(PLAYER_JUMP_SPEED);
-    }
-    if (this.player.body.touching.bottom) {
-      this.jumping = false;
-    }
-    if (this.QButton.isDown) {
-      throwQ.call(this);
-    }
+    playerMoving.call(this);
 
     // emit player movement
     const x = this.player.x;
     const y = this.player.y;
     const xVel = this.player.body.velocity.x;
     const yVel = this.player.body.velocity.y;
+    const health = this.player.health;
+    // console.log('HEALTH UPDATE', health, typeof health);
     if (
       this.player.oldPosition &&
       (x !== this.player.oldPosition.x ||
         y !== this.player.oldPosition.y ||
         xVel !== this.player.oldPosition.xVel ||
-        yVel !== this.player.oldPosition.yVel)
+        yVel !== this.player.oldPosition.yVel ||
+        health !== this.player.oldPosition.health)
     ) {
       this.socket.emit('playerMovement', {
         x: x,
         y: y,
         xVel: xVel,
         yVel: yVel,
+        health: health,
       });
     }
 
@@ -265,13 +287,39 @@ function update() {
       y: this.player.y,
       xVel: this.player.body.velocity.x,
       yVel: this.player.body.velocity.y,
+      health: this.player.health,
     };
-    const kunai = this.player.knives.getChildren();
-    if (kunai[0] && kunai[0].body.onWall()) {
-      resetQ(kunai[0]);
-    }
+    resetQ(this.player.knives.getChildren());
+    resetQ(
+      this.otherPlayers.getChildren()[0] &&
+        this.otherPlayers.getChildren()[0].knives.getChildren()
+    );
     setAnimation.call(this);
     setOtherPlayerAnimation.call(this);
+  }
+}
+
+function playerMoving() {
+  if (this.cursors.left.isDown) {
+    this.player.setVelocityX(-PLAYER_SPEED);
+  } else if (this.cursors.right.isDown) {
+    this.player.setVelocityX(PLAYER_SPEED);
+  } else {
+    this.player.setVelocityX(0);
+  }
+  if (
+    /*!this.jumping &&*/
+    this.cursors.up.isDown /*&&
+    this.player.body.touching.down*/
+  ) {
+    this.jumping = true;
+    this.player.setVelocityY(PLAYER_JUMP_SPEED);
+  }
+  if (this.player.body.touching.bottom) {
+    this.jumping = false;
+  }
+  if (this.QButton.isDown) {
+    throwQ.call(this);
   }
 }
 
@@ -297,9 +345,10 @@ function setOtherPlayerAnimation() {
     if (otherPlayer.body.velocity.y) {
       otherPlayer.anims.play(`jump${direction}P2`, true);
     } else if (otherPlayer.body.velocity.x) {
+      p2PrevDirection = direction;
       otherPlayer.anims.play(`${direction.toLowerCase()}P2`, true);
     } else {
-      otherPlayer.anims.play(`idle${direction}P2`, true);
+      otherPlayer.anims.play(`idle${p2PrevDirection || 'Right'}P2`, true);
     }
   }
 }
@@ -322,8 +371,18 @@ function throwQ() {
   }
 }
 
-function resetQ(q) {
-  q.destroy();
+function resetQ(knives) {
+  if (
+    knives &&
+    knives.length &&
+    knives.some(knife => knife.body.velocity.x === 0)
+  ) {
+    knives.forEach(knife => {
+      if (knife.body.velocity.x === 0 || knife.body.onWall) {
+        knife.destroy();
+      }
+    });
+  }
 }
 
 function render() {

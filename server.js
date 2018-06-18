@@ -20,14 +20,25 @@ const io = socketio(server);
 io.on('connection', function(socket) {
   console.log('a user connected', socket.id);
   const spawn = {
-    x: 200,
-    y: 200,
+    x: 300,
+    y: 600,
+    hText: 16,
+    mode: 'player1',
   };
   // create a new player and add it to our players object
+  const keys = Object.keys(players);
+  if (keys.length) {
+    spawn.x = 600;
+    spawn.hText = 616;
+    spawn.mode = keys.length === 1 ? 'player2' : 'viewer';
+  }
   players[socket.id] = {
     x: spawn.x,
     y: spawn.y,
     playerId: socket.id,
+    mode: spawn.mode,
+    health: 100,
+    hText: spawn.hText,
   };
   // send the players object to the new player
   socket.emit('currentPlayers', players);
@@ -46,6 +57,8 @@ io.on('connection', function(socket) {
     players[socket.id].y = movementData.y;
     players[socket.id].xVel = movementData.xVel;
     players[socket.id].yVel = movementData.yVel;
+    players[socket.id].health = movementData.health;
+
     // emit a message to all players about the player that moved
     socket.broadcast.emit('playerMoved', players[socket.id]);
   });
