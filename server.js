@@ -62,4 +62,13 @@ io.on('connection', function(socket) {
     // emit a message to all players about the player that moved
     socket.broadcast.emit('playerMoved', players[socket.id]);
   });
+
+  socket.on('throwingQ', function(movementData) {
+    players[socket.id].knife = {
+      x: movementData.x,
+      y: movementData.y,
+      knifeSpeed: movementData.knifeSpeed,
+    };
+    socket.broadcast.emit('qThrown', players[socket.id]);
+  });
 });

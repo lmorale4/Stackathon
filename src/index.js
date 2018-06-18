@@ -39,7 +39,7 @@ const config = {
   physics: {
     default: 'arcade',
     arcade: {
-      debug: true,
+      debug: false,
       gravity: { y: 300 },
     },
   },
@@ -59,6 +59,7 @@ var p1PrevDirection;
 var p2PrevDirection;
 var p1HealthText;
 var p2HealthText;
+var winner;
 const scaleDown = 0.25;
 const PLAYER_SPEED = 160;
 const PLAYER_JUMP_SPEED = -330;
@@ -88,6 +89,13 @@ function create() {
   const self = this;
   // ============ Socket ============
   this.socket = io();
+
+  winner = this.add.text(100, 200, 'WINNER', {
+    fontSize: '72px',
+    fill: '#fff',
+  });
+  winner.visible = false;
+  console.log('Winner', winner);
 
   // ============ Player Animation ============
   idleRightAnimation.call(this);
@@ -163,6 +171,19 @@ function create() {
   this.QButton = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q);
 
   this.jumping = false;
+  this.socket.on('qThrown', function(playerInfo) {
+    const otherPlayer = self.otherPlayers.getChildren()[0];
+    const playerQ = otherPlayer.knives.getFirstDead(
+      true,
+      otherPlayer.x + (playerInfo.knife.knifeSpeed > 0 ? 50 : -50),
+      otherPlayer.y + 8,
+      `knife${playerInfo.knife.knifeSpeed > 0 ? 'Right' : 'Left'}P2`
+    );
+    playerQ.scaleX = scaleDown;
+    playerQ.scaleY = scaleDown;
+    playerQ.body.allowGravity = false;
+    playerQ.setVelocityX(playerInfo.knife.knifeSpeed);
+  });
 }
 // ---------------------------------------- CREATE HELPER FUNCTIONS ----------------------------------------
 function addPlayer(self, playerInfo) {
@@ -296,6 +317,14 @@ function update() {
     );
     setAnimation.call(this);
     setOtherPlayerAnimation.call(this);
+    if (
+      this.player.health <= 0 ||
+      (this.otherPlayers.getChildren()[0] &&
+        this.otherPlayers.getChildren()[0].health <= 0)
+    ) {
+      console.log('Players', this.player, this.otherPlayers.getChildren()[0]);
+      gameOver.call(this);
+    }
   }
 }
 
@@ -368,6 +397,11 @@ function throwQ() {
       p1PrevDirection === 'Right' ? knifeSpeed : -knifeSpeed
     );
     nextQ = this.time.now + knifeRate;
+    this.socket.emit('throwingQ', {
+      x: playerQ.x,
+      y: playerQ.y,
+      knifeSpeed: p1PrevDirection === 'Right' ? knifeSpeed : -knifeSpeed,
+    });
   }
 }
 
@@ -383,6 +417,16 @@ function resetQ(knives) {
       }
     });
   }
+}
+
+function gameOver() {
+  this.physics.pause();
+  winner.visible = true;
+  const won =
+    this.player.health > 0
+      ? this.player.mode.toUpperCase()
+      : this.otherPlayers.getChildren()[0].mode.toUpperCase();
+  winner.setText('WINNER:' + won);
 }
 
 function render() {
